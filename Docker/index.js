@@ -16,7 +16,15 @@ app.get('/', async (req, res) => {
     const projectURL = 'https://tangledev00.firebaseio.com'
     const shallowURL = `${projectURL}/dashboards.json?shallow=true`
 
-    const response = await axios.get(shallowURL)
+    // Get access token to call Firebase REST API
+    const accessToken = await admin.credential.applicationDefault().getAccessToken()
+
+    const response = await axios.get(shallowURL, {
+      headers: {
+        Authorization: `Bearer ${accessToken.access_token}`,
+      },
+    })
+
     const dashboardIds = Object.keys(response.data || {})
     const dashboardsToClean = []
 
@@ -37,7 +45,6 @@ app.get('/', async (req, res) => {
     }
 
     console.log('Dashboards to clean:', dashboardsToClean)
-
     return res
       .status(200)
       .send(`Dashboards to clean: ${dashboardsToClean.join(', ')}`)
