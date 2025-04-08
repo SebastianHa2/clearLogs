@@ -1,24 +1,35 @@
-const express = require('express')
-const admin = require('firebase-admin')
-
-const app = express()
-
-const serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS)
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://tangledev00.firebaseio.com',
-})
-
 app.get('/', async (req, res) => {
-  try {
-    await admin.database().ref('dashboards/-OMuOPY2_cQDObvXrruB/dataGridLogs').remove()
-    console.log('Successfully cleared dataGridLogs')
-    res.status(200).send('Cleared logs')
-  } catch (err) {
-    console.error('Failed to clear logs:', err)
-    res.status(500).send('Something went wrong')
-  }
-})
-
-module.exports = app
+    try {
+      const dashboardsRef = admin.database().ref('dashboards')
+      const snapshot = await dashboardsRef.once('value')
+      const dashboards = snapshot.val()
+  
+      if (!dashboards) {
+        console.log('No dashboards found.')
+        return res.status(200).send('No dashboards found.')
+      }
+  
+      const dashboardsToClean = []
+  
+      Object.entries(dashboards).forEach(([dashId, dashData]) => {
+        if (
+          dashData.settings &&
+          dashData.settings.clearDataGridLogsDaily === true
+        ) {
+          dashboardsToClean.push(dashId)
+        }
+      })
+  
+      if (dashboardsToClean.length === 0) {
+        console.log('No dashboards with clearDataGridLogsDaily enabled.')
+        return res.status(200).send('No dashboards need cleaning.')
+      }
+  
+      console.log('Dashboards to clean:', dashboardsToClean)
+  
+      return res.status(200).send(`Dashboards to clean: ${dashboardsToClean.join(', ')}`)
+    } catch (err) {
+      console.error('Failed to check dashboards:', err)
+      res.status(500).send('Something went wrong')
+    }
+  })
