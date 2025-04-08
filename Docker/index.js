@@ -1,5 +1,6 @@
 const express = require('express')
 const admin = require('firebase-admin')
+const axios = require('axios')
 
 const app = express()
 
@@ -11,34 +12,39 @@ admin.initializeApp({
 })
 
 app.get('/', async (req, res) => {
-    try {
-      const dashboardsListSnapshot = await admin.database().ref('dashboards').once('value', { shallow: true })
-      const dashboardIds = Object.keys(dashboardsListSnapshot.val() || {})
-  
-      const dashboardsToClean = []
-  
-      for (const dashId of dashboardIds) {
-        const settingSnap = await admin
-          .database()
-          .ref(`dashboards/${dashId}/settings/clearDataGridLogsDaily`)
-          .once('value')
-  
-        if (settingSnap.val() === true) {
-          dashboardsToClean.push(dashId)
-        }
+  try {
+    const projectURL = 'https://tangledev00.firebaseio.com'
+    const shallowURL = `${projectURL}/dashboards.json?shallow=true`
+
+    const response = await axios.get(shallowURL)
+    const dashboardIds = Object.keys(response.data || {})
+    const dashboardsToClean = []
+
+    for (const dashId of dashboardIds) {
+      const settingSnap = await admin
+        .database()
+        .ref(`dashboards/${dashId}/settings/clearDataGridLogsDaily`)
+        .once('value')
+
+      if (settingSnap.val() === true) {
+        dashboardsToClean.push(dashId)
       }
-  
-      if (dashboardsToClean.length === 0) {
-        console.log('No dashboards with clearDataGridLogsDaily enabled.')
-        return res.status(200).send('No dashboards need cleaning.')
-      }
-  
-      console.log('Dashboards to clean:', dashboardsToClean)
-      return res.status(200).send(`Dashboards to clean: ${dashboardsToClean.join(', ')}`)
-    } catch (err) {
-      console.error('Failed to check dashboards:', err)
-      res.status(500).send('Something went wrong')
     }
-  })
+
+    if (dashboardsToClean.length === 0) {
+      console.log('No dashboards with clearDataGridLogsDaily enabled.')
+      return res.status(200).send('No dashboards need cleaning.')
+    }
+
+    console.log('Dashboards to clean:', dashboardsToClean)
+
+    return res
+      .status(200)
+      .send(`Dashboards to clean: ${dashboardsToClean.join(', ')}`)
+  } catch (err) {
+    console.error('Failed to check dashboards:', err.message)
+    res.status(500).send('Something went wrong')
+  }
+})
 
 module.exports = app
