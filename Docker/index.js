@@ -31,7 +31,7 @@ admin.initializeApp({
 // -------------------------------
 // Batch deletion helper for large logs
 // -------------------------------
-async function deleteDataGridLogsInBatches(dashId, batchSize = 500) {
+async function deleteDataGridLogsInBatches(dashId, batchSize = 5000) {
   const logsRef = admin.database().ref(`dashboards/${dashId}/dataGridLogs`)
   const snapshot = await logsRef.once('value')
   const logs = snapshot.val()
