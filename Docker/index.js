@@ -11,20 +11,20 @@ const app = express()
 let serviceAccount
 let credentialSource = process.env.GOOGLE_APPLICATION_CREDENTIALS || ''
 
-// Log the raw environment variable value (for debugging; remove or disable later)
+// For debugging: log the raw value (remove or comment out later)
 console.log('Raw GOOGLE_APPLICATION_CREDENTIALS:', credentialSource)
 
-// Remove any leading/trailing whitespace
+// Trim extra whitespace
 credentialSource = credentialSource.trim()
 
-// If the value is wrapped in quotes, remove them
+// Remove leading/trailing quotes if present
 if (credentialSource.startsWith('"') && credentialSource.endsWith('"')) {
   credentialSource = credentialSource.slice(1, -1)
 }
 
-// Determine if the credentialSource is inline JSON or a file path
+// Determine if credentialSource is inline JSON or a file path
 if (credentialSource.startsWith('{')) {
-  // It looks like inline JSON—attempt to parse it
+  // Looks like inline JSON
   try {
     serviceAccount = JSON.parse(credentialSource)
     console.log('Service account loaded from inline JSON.')
@@ -33,7 +33,7 @@ if (credentialSource.startsWith('{')) {
     throw e
   }
 } else {
-  // Otherwise, treat it as a file path
+  // Treat as a file path
   if (!fs.existsSync(credentialSource)) {
     const errMsg = `Credentials file not found at path: ${credentialSource}`
     console.error(errMsg)
@@ -56,7 +56,7 @@ admin.initializeApp({
 })
 
 // -------------------------------
-// Main route: Check dashboards settings
+// Main endpoint: Check dashboards settings
 // -------------------------------
 app.get('/', async (req, res) => {
   try {
@@ -66,18 +66,18 @@ app.get('/', async (req, res) => {
     // Obtain an access token to authenticate the REST API call
     const accessToken = await admin.credential.applicationDefault().getAccessToken()
 
-    // Call the Firebase REST API with the Bearer token
+    // Call Firebase REST API with bearer token authentication
     const response = await axios.get(shallowURL, {
       headers: {
         Authorization: `Bearer ${accessToken.access_token}`,
       },
     })
 
-    // Get the list of dashboard IDs from the shallow response
+    // Retrieve the dashboard IDs from the shallow response
     const dashboardIds = Object.keys(response.data || {})
     const dashboardsToClean = []
 
-    // For each dashboard, check if settings/clearDataGridLogsDaily is set to true
+    // Check each dashboard for the setting 'clearDataGridLogsDaily'
     for (const dashId of dashboardIds) {
       const settingSnap = await admin
         .database()
