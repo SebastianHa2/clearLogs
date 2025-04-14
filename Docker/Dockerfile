@@ -6,11 +6,11 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 RUN npm install
 
-# Copy application source code
+# Copy the rest of your application code
 COPY . .
 
-# Expose port 8080 (Cloud Run expects this port)
+# Expose port 8080 (the port Cloud Run expects)
 EXPOSE 8080
 
-# Start the application
+# Start your application
 CMD ["npm", "start"]

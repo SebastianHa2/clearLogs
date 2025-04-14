@@ -2,8 +2,12 @@ const express = require('express')
 const admin = require('firebase-admin')
 const axios = require('axios')
 const fs = require('fs')
+const bodyParser = require('body-parser')
 
 const app = express()
+
+// Use bodyParser to parse JSON bodies
+app.use(bodyParser.json())
 
 // -------------------------------
 // Load service account credentials
@@ -11,33 +15,24 @@ const app = express()
 let serviceAccount
 let credentialSource = process.env.GOOGLE_APPLICATION_CREDENTIALS || ''
 
-// For debugging: log the raw value (remove or comment out later)
-console.log('Raw GOOGLE_APPLICATION_CREDENTIALS:', credentialSource)
-
-// Trim extra whitespace
+// Trim any extra whitespace
 credentialSource = credentialSource.trim()
 
-// Remove leading/trailing quotes if present
-if (credentialSource.startsWith('"') && credentialSource.endsWith('"')) {
-  credentialSource = credentialSource.slice(1, -1)
-}
-
-// Determine if credentialSource is inline JSON or a file path
+// Determine whether the secret was injected inline or as a file path
 if (credentialSource.startsWith('{')) {
-  // Looks like inline JSON
+  // Assume inline JSON
   try {
     serviceAccount = JSON.parse(credentialSource)
     console.log('Service account loaded from inline JSON.')
   } catch (e) {
     console.error('Error parsing inline JSON for service account:', e)
-    throw e
+    process.exit(1)
   }
 } else {
-  // Treat as a file path
+  // Assume it’s a file path
   if (!fs.existsSync(credentialSource)) {
-    const errMsg = `Credentials file not found at path: ${credentialSource}`
-    console.error(errMsg)
-    throw new Error(errMsg)
+    console.error(`Credentials file not found at path: ${credentialSource}`)
+    process.exit(1)
   }
   try {
     const fileData = fs.readFileSync(credentialSource, 'utf8')
@@ -45,14 +40,14 @@ if (credentialSource.startsWith('{')) {
     console.log('Service account loaded from file:', credentialSource)
   } catch (e) {
     console.error('Error reading or parsing credentials file:', e)
-    throw e
+    process.exit(1)
   }
 }
 
 // Initialize Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://tangledev00.firebaseio.com',
+  databaseURL: "https://tangledev00.firebaseio.com",
 })
 
 // -------------------------------
@@ -63,10 +58,10 @@ app.get('/', async (req, res) => {
     const projectURL = 'https://tangledev00.firebaseio.com'
     const shallowURL = `${projectURL}/dashboards.json?shallow=true`
 
-    // Obtain an access token to authenticate the REST API call
+    // Obtain an access token for the Firebase REST API call
     const accessToken = await admin.credential.applicationDefault().getAccessToken()
 
-    // Call Firebase REST API with bearer token authentication
+    // Call the Firebase REST API with Bearer token authentication
     const response = await axios.get(shallowURL, {
       headers: {
         Authorization: `Bearer ${accessToken.access_token}`,
@@ -77,7 +72,7 @@ app.get('/', async (req, res) => {
     const dashboardIds = Object.keys(response.data || {})
     const dashboardsToClean = []
 
-    // Check each dashboard for the setting 'clearDataGridLogsDaily'
+    // Check each dashboard for the 'clearDataGridLogsDaily' flag in its settings
     for (const dashId of dashboardIds) {
       const settingSnap = await admin
         .database()
@@ -103,4 +98,10 @@ app.get('/', async (req, res) => {
   }
 })
 
-module.exports = app
+// -------------------------------
+// Start the server
+// -------------------------------
+const PORT = process.env.PORT || 8080
+app.listen(PORT, () => {
+  console.log(`Listening on port ${PORT}`)
+})
