@@ -72,7 +72,7 @@ app.get('/', async (req, res) => {
 
     // Loop over each dashboard and remove its workflowLogs
     for (const dashId of dashboardsToClean) {
-      await admin.database().ref(`dashboards/${dashId}/workflowLogs`).remove()
+      await admin.database().ref(`dashboards/${dashId}/dataGridLogs`).remove()
       console.log(`Removed workflowLogs for dashboard ${dashId}`)
     }
 
