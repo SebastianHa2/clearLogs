@@ -14,7 +14,6 @@ app.use(bodyParser.json())
 let serviceAccount
 
 try {
-  // Directly parse the inline JSON from the environment variable
   serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS)
   console.log('Service account loaded from inline JSON.')
 } catch (e) {
@@ -22,44 +21,66 @@ try {
   process.exit(1)
 }
 
-// Create a credential instance from the service account
 const myCredential = admin.credential.cert(serviceAccount)
 
-// Initialize Firebase Admin with the certificate credential
 admin.initializeApp({
   credential: myCredential,
   databaseURL: "https://tangledev00.firebaseio.com",
 })
 
 // -------------------------------
-// Main endpoint: Check dashboards settings and remove workflowLogs
+// Batch deletion helper for large logs
+// -------------------------------
+async function deleteDataGridLogsInBatches(dashId, batchSize = 500) {
+  const logsRef = admin.database().ref(`dashboards/${dashId}/dataGridLogs`)
+  const snapshot = await logsRef.once('value')
+  const logs = snapshot.val()
+
+  if (!logs) {
+    console.log(`No dataGridLogs found for dashboard ${dashId}`)
+    return
+  }
+
+  const allKeys = Object.keys(logs)
+  console.log(`Found ${allKeys.length} dataGridLogs for dashboard ${dashId}`)
+
+  for (let i = 0; i < allKeys.length; i += batchSize) {
+    const batch = allKeys.slice(i, i + batchSize)
+    const updates = {}
+    batch.forEach(key => updates[key] = null)
+    await logsRef.update(updates)
+    console.log(`Deleted batch ${i / batchSize + 1} (${batch.length} items) for dashboard ${dashId}`)
+  }
+
+  console.log(`Finished cleaning dataGridLogs for dashboard ${dashId}`)
+}
+
+// -------------------------------
+// Main endpoint
 // -------------------------------
 app.get('/', async (req, res) => {
   try {
     const projectURL = 'https://tangledev00.firebaseio.com'
     const shallowURL = `${projectURL}/dashboards.json?shallow=true`
 
-    // Get an access token using our certificate credential
     const tokenResult = await myCredential.getAccessToken()
     const accessToken = tokenResult.access_token
 
-    // Call the Firebase REST API with Bearer token authentication
     const response = await axios.get(shallowURL, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
     })
 
-    // Get the list of dashboard IDs from the shallow response
     const dashboardIds = Object.keys(response.data || {})
     const dashboardsToClean = []
 
-    // Check each dashboard for the 'clearDataGridLogsDaily' setting
     for (const dashId of dashboardIds) {
       const settingSnap = await admin
         .database()
         .ref(`dashboards/${dashId}/settings/clearDataGridLogsDaily`)
         .once('value')
+
       if (settingSnap.val() === true) {
         dashboardsToClean.push(dashId)
       }
@@ -70,23 +91,19 @@ app.get('/', async (req, res) => {
       return res.status(200).send('No dashboards need cleaning.')
     }
 
-    // Loop over each dashboard and remove its workflowLogs
     for (const dashId of dashboardsToClean) {
-      await admin.database().ref(`dashboards/${dashId}/dataGridLogs`).remove()
-      console.log(`Removed workflowLogs for dashboard ${dashId}`)
+      await deleteDataGridLogsInBatches(dashId)
     }
 
     return res
       .status(200)
-      .send(`Removed workflowLogs for dashboards: ${dashboardsToClean.join(', ')}`)
+      .send(`Removed dataGridLogs for dashboards: ${dashboardsToClean.join(', ')}`)
   } catch (err) {
     console.error('Failed to process dashboards:', err.message)
     res.status(500).send('Something went wrong')
   }
 })
 
-// -------------------------------
-// Start the server
 // -------------------------------
 const PORT = process.env.PORT || 8080
 app.listen(PORT, () => {
