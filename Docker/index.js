@@ -6,8 +6,7 @@ const bodyParser = require('body-parser')
 
 const app = express()
 
-// Use bodyParser to parse JSON bodies
-app.use(bodyParser.json())
+app.use(bodyParser.json()) // parse JSON bodies
 
 // -------------------------------
 // Load service account credentials
@@ -18,9 +17,8 @@ let credentialSource = process.env.GOOGLE_APPLICATION_CREDENTIALS || ''
 // Trim any extra whitespace
 credentialSource = credentialSource.trim()
 
-// Determine whether the secret was injected inline or as a file path
+// Determine whether the credentialSource is inline JSON or a file path
 if (credentialSource.startsWith('{')) {
-  // Assume inline JSON
   try {
     serviceAccount = JSON.parse(credentialSource)
     console.log('Service account loaded from inline JSON.')
@@ -29,7 +27,7 @@ if (credentialSource.startsWith('{')) {
     process.exit(1)
   }
 } else {
-  // Assume it’s a file path
+  // Assume it's a file path
   if (!fs.existsSync(credentialSource)) {
     console.error(`Credentials file not found at path: ${credentialSource}`)
     process.exit(1)
@@ -44,9 +42,12 @@ if (credentialSource.startsWith('{')) {
   }
 }
 
-// Initialize Firebase Admin SDK
+// Create a credential instance from the service account object.
+const myCredential = admin.credential.cert(serviceAccount)
+
+// Initialize Firebase Admin using the certificate credential.
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: myCredential,
   databaseURL: "https://tangledev00.firebaseio.com",
 })
 
@@ -58,21 +59,22 @@ app.get('/', async (req, res) => {
     const projectURL = 'https://tangledev00.firebaseio.com'
     const shallowURL = `${projectURL}/dashboards.json?shallow=true`
 
-    // Obtain an access token for the Firebase REST API call
-    const accessToken = await admin.credential.applicationDefault().getAccessToken()
+    // Use our certificate credential to get an access token.
+    const tokenResult = await myCredential.getAccessToken()
+    const accessToken = tokenResult.access_token
 
-    // Call the Firebase REST API with Bearer token authentication
+    // Call the Firebase REST API with the Bearer token.
     const response = await axios.get(shallowURL, {
       headers: {
-        Authorization: `Bearer ${accessToken.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
     })
 
-    // Retrieve the dashboard IDs from the shallow response
+    // Retrieve the dashboard IDs from the shallow response.
     const dashboardIds = Object.keys(response.data || {})
     const dashboardsToClean = []
 
-    // Check each dashboard for the 'clearDataGridLogsDaily' flag in its settings
+    // Check each dashboard for the 'clearDataGridLogsDaily' setting.
     for (const dashId of dashboardIds) {
       const settingSnap = await admin
         .database()
@@ -98,9 +100,7 @@ app.get('/', async (req, res) => {
   }
 })
 
-// -------------------------------
-// Start the server
-// -------------------------------
+// Start the server on the specified port.
 const PORT = process.env.PORT || 8080
 app.listen(PORT, () => {
   console.log(`Listening on port ${PORT}`)
